@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Architecture Decision Record",
+  "type": "object",
+  "required": [
+    "id",
+    "status",
+    "author",
+    "creation_date",
+    "context_tags",
+    "solid_principles",
+    "related_atoms"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^ADR-[0-9]{4}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "accepted", "superseded", "rejected"]
+    },
+    "author": {
+      "type": "string"
+    },
+    "creation_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date"
+    },
+    "context_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "solid_principles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["SRP", "OCP", "LSP", "ISP", "DIP"]
+      },
+      "minItems": 1
+    },
+    "related_atoms": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^ATOM-[0-9]{4}$"
+      }
+    },
+    "context": {"type": "string"},
+    "decision": {"type": "string"},
+    "consequences": {"type": "string"}
+  },
+  "additionalProperties": false
+}

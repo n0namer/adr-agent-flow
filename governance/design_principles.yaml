@@ -1,0 +1,42 @@
+principles:
+  - name: Single Responsibility Principle
+    description: Каждая компонента отвечает только за одну зону ответственности и имеет чётко определённые обязанности.
+    enforcement:
+      - Проверка структуры атомов и модулей на наличие одной основной цели.
+      - Лимит на пересечение scope между атомами и ownership.
+  - name: Open-Closed Principle
+    description: Публичные API расширяемы без модификации существующего поведения.
+    enforcement:
+      - Требование ADR-тегов на публичных символах.
+      - Проверка наличия тестов для новых расширений без изменения существующих тестов.
+  - name: Liskov Substitution Principle
+    description: Наследники и реализации интерфейсов должны поддерживать контракт базового типа.
+    enforcement:
+      - Линтеры и статический анализ на соответствие контрактам.
+      - Тестовые кейсы покрывают инварианты интерфейсов.
+  - name: Interface Segregation Principle
+    description: Интерфейсы должны оставаться минимальными и специализированными.
+    enforcement:
+      - Мониторинг размера публичных интерфейсов в CI.
+      - Обратная связь агента при нарушении.
+  - name: Dependency Inversion Principle
+    description: Модули высокого уровня не зависят от деталей; оба зависят от абстракций.
+    enforcement:
+      - Конвенция инъекции зависимостей через интерфейсы.
+      - Проверка зависимостей и слойности в workflow.
+quality_rules:
+  modularity:
+    description: Слабая связанность и высокая связность компонентов.
+    metrics:
+      - coupling_score
+      - cohesion_score
+  testability:
+    description: Поддержка написания и выполнения unit, integration и mutation тестов.
+    requirements:
+      - Тесты создаются вместе с атомами.
+      - Минимальное покрытие 80%.
+  security:
+    description: Следование безопасным практикам кодирования и регулярные сканы.
+    requirements:
+      - dependency_scan
+      - secret_scan

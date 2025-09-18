@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Atom",
+  "type": "object",
+  "required": [
+    "id",
+    "adr",
+    "status",
+    "owner",
+    "created",
+    "scope_paths",
+    "quality_rules"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^ATOM-[0-9]{4}$"
+    },
+    "adr": {
+      "type": "string",
+      "pattern": "^ADR-[0-9]{4}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["planned", "in-progress", "done", "blocked"]
+    },
+    "owner": {
+      "type": "string"
+    },
+    "created": {
+      "type": "string",
+      "format": "date"
+    },
+    "scope_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^ATOM-[0-9]{4}$"
+      }
+    },
+    "quality_rules": {
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lint": {
+          "type": "boolean"
+        },
+        "security": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "path"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code", "test", "doc", "diagram"]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
