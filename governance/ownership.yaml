@@ -1,0 +1,26 @@
+areas:
+  core_workflow:
+    owners:
+      - architecture-team
+      - platform-team
+    paths:
+      - workflow.md
+      - prompts/**
+      - adr_schema/**
+  governance:
+    owners:
+      - architecture-team
+    paths:
+      - governance/**
+  state_management:
+    owners:
+      - operations
+    paths:
+      - state/**
+  documentation:
+    owners:
+      - documentation-guild
+    paths:
+      - README.md
+      - README.adragent.md
+      - docs/**

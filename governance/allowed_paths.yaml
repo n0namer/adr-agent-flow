@@ -1,0 +1,18 @@
+atoms:
+  - name: adr_workflow_bootstrap
+    scope_paths:
+      - README.adragent.md
+      - workflow.md
+      - state/adragent_state.json
+      - prompts/**
+      - adr_schema/**
+  - name: governance_foundation
+    scope_paths:
+      - governance/**
+  - name: documentation_updates
+    scope_paths:
+      - README.md
+      - docs/**
+rules:
+  no_overlap: true
+  require_owner: true
