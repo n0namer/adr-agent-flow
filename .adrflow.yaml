@@ -1,0 +1,28 @@
+repo:
+  type: mono
+  services: [api]
+paths:
+  adr_dir: docs/adr
+  dod_file: docs/dod/DoD.yaml
+  reports: reports/
+  gates: tools/
+adapters:
+  coverage: auto
+  e2e: auto
+  security: auto
+  logger: auto
+modes: [MLM, VTB]
+llm_judge:
+  provider: none
+  model: auto
+enforcement: report-only
+plugins:
+  discovery:
+    - local:tools/plugins
+    - entrypoint:adrflow.plugins
+gates:
+  mode: report-only
+  include:
+    - adr-trace
+    - log-vs-adr
+    - dod-gate

@@ -1,0 +1,19 @@
+release: RC-1
+scope:
+  stories: [ST-101, ST-135, ST-201]
+  modes: [MLM, VTB]
+thresholds:
+  coverage: { line: 85, branch: 75 }
+  perf: { p95_ms: 300, error_rate_pct: 0.5 }
+  security: { max_critical: 0, max_high: 0 }
+evidence:
+  e2e: ["reports/e2e/mlm.json", "reports/e2e/vtb.json"]
+  logs: ["reports/debug.log.jsonl", "reports/adr_log_check.json"]
+  docs: ["docs/_build/index.html", "openapi.yaml"]
+gates:
+  - name: "adr-trace"
+    script: "python tools/adr_trace.py --src . --adr docs/adr --out reports/adr_trace.json"
+  - name: "log-vs-adr"
+    script: "python tools/log_analyzer.py --adr docs/adr --logs reports/debug.log.jsonl --out reports/adr_log_check.json"
+  - name: "dod-gate"
+    script: "python tools/dod_gate.py --dod docs/dod/DoD.yaml --checks governance/ci_checks.yaml --out reports/dod_gate.json"
