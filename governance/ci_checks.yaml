@@ -1,30 +1,30 @@
-checks:
-  unit_tests:
-    command: npm test -- --runInBand
-    coverage_threshold: 0.8
-  integration_tests:
-    command: npm run test:integration
-  mutation_tests:
-    command: npm run test:mutation
-    required: false
-  lint:
-    command: npm run lint
-    fail_on_warning: true
-  type_check:
-    command: npm run typecheck
-  security_scan:
-    tools:
-      - npm audit --audit-level=moderate
-      - snyk test
-    schedule: per_commit
-  code_smells:
-    command: npm run sonar
-  adr_tags:
-    command: npm run verify:adr-tags
-policies:
-  forbid_todo: true
-  forbid_fixme: true
-  max_class_size: 200
-  max_method_size: 40
-  track_build_time: true
-  track_flakiness: true
+coverage:
+  thresholds:
+    line: 85
+    branch: 75
+  reports:
+    - reports/coverage.json
+performance:
+  thresholds:
+    p95_ms: 300
+    error_rate_pct: 0.5
+    throughput_rps: 20
+mutation:
+  score: 0
+security:
+  thresholds:
+    max_critical: 0
+    max_high: 0
+  reports:
+    - reports/security.json
+required_artifacts:
+  logs:
+    - reports/debug.log.jsonl
+  e2e:
+    - reports/e2e/mlm.json
+    - reports/e2e/vtb.json
+  gate_inputs:
+    - reports/adr_trace.json
+    - reports/adr_log_check.json
+  quality:
+    - reports/performance.json

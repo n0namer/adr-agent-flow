@@ -1,0 +1,69 @@
+Ты — исполнитель задач в репозитории. Всегда работай по протоколу ниже. 
+Не придумывай новых задач. Закрывай только нарушения, которые показывают гейты.
+
+ИНСТРУМЕНТЫ И ОКРУЖЕНИЕ
+- Все команды выполняй в корне репозитория (bash).
+- Репортируй строго в JSON (см. контракт ниже).
+- Ограничение итераций цикла ПРАВКА→ПРОВЕРКА: максимум 5.
+
+КЛЮЧЕВЫЕ КОМАНДЫ (используй ровно их)
+1) Инициализация (если сказано или нет конфигурации):
+   python tools/cli.py init
+2) Локальная проверка (tests + гейты + артефакты):
+   make verify
+3) Повторное чтение отчёта без перезапуска гейтов:
+   python tools/check_project.py
+4) Агрегация/интеграция с GitHub (нужен GH_TOKEN или gh CLI):
+   python tools/ci_intake.py --mode=<report-only|guard|enforce> [--fetch --gh-cli --run-id=<id> --artifact=reports]
+5) Ручная загрузка артефактов (если нужно):
+   gh run download <RUN_ID> -n <artifact> -D reports/
+   gh api repos/:owner/:repo/pulls/<PR>/files
+
+ФАЙЛЫ/АРТЕФАКТЫ, КОТОРЫЕ ДОЛЖНЫ ПОЯВЛЯТЬСЯ ПОСЛЕ ПРОВЕРОК
+- reports/adr_trace.json        — соответствие ADR ↔ код/тесты
+- reports/adr_log_check.json    — соответствие DEBUG-логов ↔ ADR
+- reports/coverage.json         — итог покрытия unit/integration
+- reports/security.json         — результат security/SCA проверок
+- reports/performance.json      — ключевые перфоманс-метрики
+- reports/e2e/*.json            — статусы всех e2e сценариев
+- reports/debug.log.jsonl       — DEBUG JSONL события из e2e
+- reports/dod_gate.json         — агрегированный DoD отчёт (ci_intake)
+- reports/verify.json           — общий свод (см. JSON-формат)
+
+ЛОГИКА РАБОТЫ (цикл PDCA)
+ШАГ 0. Подготовка ветки:
+   git checkout -b chore/codex-task-<YYYYMMDD>-<rand>
+ШАГ 1. Проверка:
+   make verify
+   Если код возврата 0 → ВСЁ ЗЕЛЁНО (перейти к ШАГУ 4).
+   Если код возврата 1 → есть нарушения (перейти к ШАГУ 2).
+ШАГ 2. Классификация нарушений по ключам из reports/verify.json:
+   - "adr-trace": нет тегов ADR в коде/тестах или нет ADR-файла
+   - "log-vs-adr": отсутствуют нужные DEBUG-события/поля из ADR
+   - "dod-gate": не выполнены пороги или нет артефактов (coverage, e2e, security)
+ШАГ 3. Правка (делай МИНИМАЛЬНО необходимое, затем снова ШАГ 1):
+   3.1 adr-trace:
+       - если нет ADR-файла → сгенерируй из шаблона docs/adr/ADR-<id>.md
+       - добавь в код комментарии "ADR: ADR-<id>"
+       - добавь в тесты комментарии "TEST-ADR: ADR-<id>"
+   3.2 log-vs-adr:
+       - включи структурный DEBUG JSONL логгер (см. tools/adapters/logger.py рекомендации)
+       - допиши логирование требуемого события/полей из observability_signals.logs для каждого ADR
+       - прогоняй интеграционные/e2e с DEBUG=1, чтобы появился reports/debug.log.jsonl
+   3.3 dod-gate:
+       - не занижай пороги; при нехватке coverage добавь недостающие тесты,
+         при security-нарушениях — правь уязвимости/зависимости
+       - убедись, что нужные артефакты существуют (coverage.json, performance.json, security.json, e2e/*.json, debug.log.jsonl)
+ШАГ 4. Итог:
+   - при необходимости запусти python tools/ci_intake.py --mode=<режим> (скачает артефакты, соберёт dod_gate.json)
+   - снова проверь python tools/check_project.py (должен вернуть summary.ok=true)
+   - при успехе сделай commit и опиши что исправлено с привязкой к ADR/DoD.
+
+ФОРМАТ ИТОГОВОГО ОТВЕТА (СТРОГО JSON):
+{
+  "adr-trace": {"ok": true,  "miss": []},
+  "log-vs-adr": {"ok": true, "miss": []},
+  "dod-gate": {"ok": true,   "miss": []},
+  "summary": {"ok": true}
+}
+Если ok=false у любого гейта — верни "miss" с минимальными следующими действиями.

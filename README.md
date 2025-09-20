@@ -16,10 +16,32 @@
 
 ### Компоненты системы (файлы / структуры)
 
+
+### CLI adrflow
+
+Для запуска локальных гейтов и отчётов доступен CLI:
+
+* `adrflow init` — аудит и подготовка bootstrap-патча (идемпотентный).
+* `adrflow verify` — локальный прогон гейтов из `.adrflow.yaml` с сохранением `reports/verify.json`.
+* `adrflow docs` — печать ожидаемых артефактов и фактически сгенерированных файлов в каталоге `reports/`.
+* `adrflow suggest` — список минимальных фиксов на основе `reports/verify.json` (вида `gate: [miss]`).
+* `adrflow adopt --mode=<report|guard|enforce>` — перевод гейтов в нужный режим. Опциональный `--service` меняет режим точечно.
+
+Конфигурация хранится в `.adrflow.yaml`; она описывает пути артефактов, выбранные адаптеры и режим включения гейтов (report-only/guard/enforce).
 | Название                                            | Назначение                                                                                                                                        |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **governance/design\_principles.yaml**              | Определяет дизайн-принципы: SOLID, separation-of-concerns, modularity, low coupling, high cohesion и др.                                          |
-| **governance/ci\_checks.yaml**                      | Пороги качества: unit, integration, mutation, линтеры, типизация, security, forbid TODO/FIXME, проверка ADR-тегов.                                |
+| **governance/ci\_checks.yaml**                      | Пороги Definition-of-Done: минимальное покрытие, требования к статике, допуски по security.                                                     |
+| **docs/dod/DoD.yaml**                                | Машиночитаемый Definition of Done: scope, пороги качества, артефакты, список гейтов и команд для CI.                                            |
+| **docs/adr/**                                        | Принятые ADR с front-matter, включающим acceptance criteria и сигналы наблюдаемости.                                                            |
+| **tools/adr_trace.py**                               | Автоматический трейсинг ADR ↔ код ↔ тесты, формирует `reports/adr_trace.json`.                                                                  |
+| **tools/log_analyzer.py**                            | Анализ JSONL debug-логов и проверка наличия сигналов, описанных в ADR.                                                                          |
+| **tools/dod_gate.py**                                | Единый DoD-гейт: проверка покрытия, трейсинга, лог-анализа, security/perf/мутационного отчёта и обязательных артефактов.                        |
+| **tools/ci_intake.py**                               | Оркестратор для Codex/LLM-контейнера: по необходимости скачивает артефакты (`gh run download` или REST), вызывает `adrflow verify` и агрегирует `reports/dod_gate.json`. |
+| **.github/workflows/ci.yml**                         | CI-конвейер, который последовательно запускает тесты, трейсинг, анализ логов и DoD gate.                                                         |
+| **prompts/finish_release.md**                        | Инструкция для агента на финальной стадии: запуск трейсинга, E2E, лог-анализа и DoD gate с JSON-ответом.                                        |
+| **prompts/adr\_draft\_bot.md**, **dod\_curator.md**, **gate\_composer.md** | Роли для генерации ADR, уточнения DoD и сборки CI-гейтов.                                                  |
+| **prompts/llm\_fact\_checker.md**, **llm\_planner.md**, **llm\_referee.md** | LLM-судьи: проверка логов/репортов против ADR, планирование фиксов и мета-оценка решений.                    |
 | **governance/ownership.yaml / allowed\_paths.yaml** | Отвечает за who owns какую часть кода и какие пути могут перекрывать атомы; правила непересечения.                                                |
 | **adr\_schema/**                                    | Шаблоны ADR и атомов + JSON-схемы для валидации.                                                                                                  |
 | **prompts/**                                        | Шаги/сценарии для агента: выяснение контекста, генерация ADR, атомизация, план параллельности, реализация, трейсинг, docs, feedback, регенерация. |
@@ -28,6 +50,81 @@
 | **state/adragent\_state.json (или yaml)**           | Файл состояния между сессиями агента: текущая фаза, активные ADR/атомы, gaps, что уже сделано.                                                    |
 
 ---
+
+#### Обязательные артефакты и порядок запуска
+
+* **Coverage:** `reports/coverage.json` — формируется `pytest --cov` (см. `make test`). Порог: line ≥ 85, branch ≥ 75.
+* **Security:** `reports/security.json` — минимум содержит `critical`, `high`. Порог: 0 критических/высоких.
+* **Performance:** `reports/performance.json` — метрики `p95_ms`, `error_rate_pct`, `throughput_rps` (поддержка DoD для перфоманса).
+* **E2E:** `reports/e2e/*.json` — статусы сценариев с ключом `ok/pass`. Минимум: mlm и vtb.
+* **DEBUG logs:** `reports/debug.log.jsonl` — структурированные события (`event`, `adr`, `trace_id`, `provider`, `outcome`, `latency_ms`).
+* **ADR trace & log check:** `reports/adr_trace.json`, `reports/adr_log_check.json` — результаты гейтов `adr-trace` и `log-vs-adr`.
+* **Теги в коде/тестах:** комментарии вида `# ADR: ADR-XXXX` и `# TEST-ADR: ADR-XXXX` для каждого acceptance-пути.
+
+Типовой локальный цикл (greenfield):
+
+```bash
+make verify                  # собирает coverage/e2e/security/perf, запускает гейты и ci_intake
+python tools/check_project.py  # печатает JSON вердикт (обёртка над adrflow verify)
+python tools/ci_intake.py --mode=report-only  # повторная агрегация/интеграция с GitHub при необходимости
+```
+
+Для brownfield-проектов `make verify` использует ваши реальные тесты/скрипты (см. `Makefile`), а `tools/ci_intake.py` способен подтянуть артефакты из GitHub Actions.
+
+#### CI intake и доступ к GitHub
+
+`tools/ci_intake.py` умеет скачивать артефакты тремя способами:
+
+1. **GitHub CLI** (`gh run download`). Установите CLI в контейнере и передайте `--fetch --gh-cli --run-id=<id> [--artifact=name]`.
+2. **REST API** (`https://api.github.com/repos/:owner/:repo/actions/runs/:run_id/artifacts`). Используйте `GH_TOKEN` с `actions:read` и укажите `--owner`, `--repo`, `--run-id`.
+3. **Локальный режим** — если артефакты уже в `reports/`, просто вызовите `python tools/ci_intake.py --skip-verify --mode=<режим>`.
+
+#### Настройка GitHub-интеграции
+
+Чтобы Codex (или другой агент) смог подтягивать CI-артефакты прямо из GitHub, подготовьте среду следующим образом:
+
+1. **Установите GitHub CLI** в контейнере агента: `sudo apt-get update && sudo apt-get install -y gh`.
+2. **Выдайте токен:** создайте PAT с правами `actions:read`, `contents:read`, `pull_requests:read` (можно ограничить SSO) и передайте его через переменную окружения `GH_TOKEN` или `GITHUB_TOKEN`.
+3. **Аутентифицируйте gh:** `echo "$GH_TOKEN" | gh auth login --with-token`.
+4. **Передайте контекст запуска** (можно через переменные или флаги CLI):
+   * `ADR_GH_OWNER` / `ADR_GH_REPO` — владелец и репозиторий (альтернатива флагам `--owner`/`--repo`).
+   * `ADR_GH_RUN_ID` — идентификатор нужного GitHub Actions run (либо используйте `--branch` и `--workflow` для автоматического поиска последнего).
+   * `ADR_GH_ARTIFACT` (опционально) — имя артефакта, если run содержит несколько архивов.
+5. **Запустите intake:**
+   ```bash
+   python tools/ci_intake.py \
+     --mode=guard \
+     --fetch \
+     --gh-cli \
+     --owner "$ADR_GH_OWNER" --repo "$ADR_GH_REPO" \
+     --run-id "$ADR_GH_RUN_ID" \
+     --artifact "$ADR_GH_ARTIFACT"
+   ```
+   Скрипт скачает артефакты в `reports/`, повторно вызовет `adrflow verify` и запишет агрегированный результат в `reports/dod_gate.json`.
+
+Если хотите обойтись без GitHub CLI, передайте `--rest` и укажите `--token` либо положитесь на `GH_TOKEN` — скрипт вызовет REST API напрямую.
+
+#### Работа без GitHub-интеграции
+
+В режиме чисто локальной проверки агент может не подключаться к GitHub вовсе:
+
+1. Сформируйте артефакты локально (`make verify` или собственный набор команд) — в каталоге `reports/` должны появиться coverage, security, e2e и debug-лог.
+2. Вызовите `python tools/check_project.py` — команда прогонит `adrflow verify`, сформирует `reports/verify.json` и выведет JSON-вердикт.
+3. При необходимости выполните `python tools/ci_intake.py --mode=report-only --skip-fetch` — intake прочитает уже готовые файлы из `reports/` и соберёт `reports/dod_gate.json` без обращения к GitHub.
+4. Для CI в частной среде (GitLab, локальный Jenkins) достаточно обеспечить, чтобы шаги пайплайна складывали артефакты в ту же структуру и сохраняли их как build-артефакты — intake будет работать поверх локального каталога.
+
+JSON-ответ (пример):
+
+```json
+{
+  "metadata": {"run_id": 123, "mode": "guard"},
+  "verify": {"adr-trace": {"ok": true, "miss": []}, "summary": {"ok": true}},
+  "dod": {"summary": {"ok": true, "miss": []}, "coverage": {"ok": true, "actual": {"line": 90, "branch": 80}}},
+  "summary": {"ok": true, "mode": "guard", "miss": []}
+}
+```
+
+Если любой из гейтов `ok=false`, `summary.miss` перечислит конкретные нарушения DoD.
 
 ### Процесс / фазы (workflow)
 
@@ -47,13 +144,13 @@
    Агент генерирует план кода + тестов, код, тесты, минимум соблюдения SOLID. Public API с ADR-тегами.
 
 6. **Фаза F — Трейсинг и тесты-покрытие**
-   Проверка: все публичные символы ADR-теги, unit + integration тесты + (если поддерживает стек) мутaционное покрытие. Проверка линтеров, статического анализа, безопасности.
+   Проверка: все публичные символы ADR-теги, unit + integration тесты + (если поддерживает стек) мутaционное покрытие. Проверка линтеров, статического анализа, безопасности. Собираем структурированные JSONL debug-логи (с `event`, `adr`, `trace_id` и др.) для дальнейшей сверки с ADR acceptance.
 
 7. **Фаза G — Документация**
    Генерация / обновление индекса ADR↔символы, сборка документации (MyST/Sphinx или аналог), артефакты.
 
 8. **Фаза H — Обратная связь / ревью / gaps**
-   Сверка результатов с acceptance criteria ADR; определение пробелов (“gaps”); если есть gaps — регенерация атомов / планов; если всё выполнено — возможен шаг релиза.
+   Сверка результатов с acceptance criteria ADR; автоматический анализ логов против `observability_signals` (tools/log_analyzer.py); определение пробелов (“gaps”); агрегирование статусов через `tools/ci_intake.py` (тянет артефакты из GitHub, запускает LLM-судей, пишет `reports/dod_gate.json`). Если есть gaps — регенерация атомов / планов; если всё выполнено — возможен шаг релиза и DoD gate.
 
 9. **Merge / Release политика**
    Без ADR-тега, без покрытия, без документации / трейсинга — **нет мерджа**.
